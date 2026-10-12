@@ -21,9 +21,15 @@ export class RemindersController {
 
   @Post('settings')
   saveSettings(@CurrentUser() auth: AuthContext, @Body() dto: Record<string, unknown>) {
+    // Whitelist known keys and value types — settings JSON must not carry arbitrary payloads.
+    const clean: Record<string, unknown> = {};
+    for (const key of ['before24h', 'before2h', 'afterVisit'] as const) {
+      if (typeof dto[key] === 'boolean') clean[key] = dto[key];
+    }
+    if (dto.channel === 'TELEGRAM' || dto.channel === 'SMS') clean.channel = dto.channel;
     return this.prisma.withTenant(auth.tenantId, async (tx) => {
       const tenant = await tx.tenant.findUnique({ where: { id: auth.tenantId } });
-      const settings = { ...((tenant?.settings ?? {}) as object), reminders: dto };
+      const settings = { ...((tenant?.settings ?? {}) as object), reminders: clean };
       await tx.tenant.update({ where: { id: auth.tenantId }, data: { settings: settings as never } });
       return ok(settings.reminders);
     });

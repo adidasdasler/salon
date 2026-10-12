@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } fr
 import { BookingStatus, UserRole } from '@salon/core';
 import { Roles, CurrentUser, AuthContext } from '../common/decorators';
 import { ok, parsePagination, paginationMeta } from '../common/helpers';
+import { AppError } from '../common/app-error';
 import { PrismaService } from '../database/prisma.service';
 import { BookingsService, CreateBookingDto } from './bookings.service';
 import { SlotsService } from './slots.service';
@@ -25,13 +26,29 @@ export class BookingsController {
     private readonly prisma: PrismaService,
   ) {}
 
-  /** Calendar range list: ?from=ISO&to=ISO[&resourceId=] */
+  /** Calendar range list: ?from=ISO&to=ISO[&resourceId=][&status=] */
   @Get()
   async list(
     @CurrentUser() auth: AuthContext,
     @Query() q: { page?: number; limit?: number; from?: string; to?: string; resourceId?: string; status?: string },
   ) {
     const p = parsePagination(q);
+    // Strict input validation — reject malformed dates/enums instead of NaN crashes.
+    const ISO_RE = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/;
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (q.from && (!ISO_RE.test(q.from) || Number.isNaN(Date.parse(q.from)))) {
+      throw AppError.badRequest('VALIDATION_ERROR', 'Некорректный параметр from');
+    }
+    if (q.to && (!ISO_RE.test(q.to) || Number.isNaN(Date.parse(q.to)))) {
+      throw AppError.badRequest('VALIDATION_ERROR', 'Некорректный параметр to');
+    }
+    if (q.resourceId && !UUID_RE.test(q.resourceId)) {
+      throw AppError.badRequest('VALIDATION_ERROR', 'Некорректный параметр resourceId');
+    }
+    const VALID_STATUSES = Object.values(BookingStatus) as string[];
+    if (q.status && !VALID_STATUSES.includes(q.status)) {
+      throw AppError.badRequest('VALIDATION_ERROR', 'Некорректный статус');
+    }
     return this.prisma.withTenant(auth.tenantId, async (tx) => {
       const where = {
         ...(q.from ? { startsAt: { gte: new Date(q.from) } } : {}),

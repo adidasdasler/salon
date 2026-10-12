@@ -326,6 +326,8 @@ export function formatMoney(kopecks: number, currency = 'RUB'): string {
   );
 }
 
+export * from './api-client';
+
 export const SLUG_RE = /^[a-z0-9]([a-z0-9-]{1,38}[a-z0-9])$/;
 export const RESERVED_SUBDOMAINS = new Set([
   'www',

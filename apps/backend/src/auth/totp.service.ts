@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 
 /**
@@ -20,9 +20,13 @@ export class TotpService {
   }
 
   verify(secretB32: string, code: string, window = 1): boolean {
+    if (!/^\d{6}$/.test(code)) return false;
     const now = Math.floor(Date.now() / 30_000);
+    const given = Buffer.from(code);
     for (let i = -window; i <= window; i++) {
-      if (thisCodeAt(secretB32, now + i) === code) return true;
+      // constant-time comparison to avoid side-channel leakage of the step match
+      const expected = Buffer.from(this.codeAt(secretB32, now + i));
+      if (expected.length === given.length && timingSafeEqual(expected, given)) return true;
     }
     return false;
   }
