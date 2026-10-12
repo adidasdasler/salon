@@ -1,5 +1,6 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient, Prisma } from '@prisma/client';
+import { normalizeValue } from '../common/helpers';
 
 /**
  * Tenant-scoped Prisma wrapper.
@@ -16,6 +17,11 @@ import { PrismaClient, Prisma } from '@prisma/client';
  */
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  /** Apply Decimal/BigInt → number normalization to any query result. */
+  static normalize<T>(data: T): T {
+    return normalizeValue(null, data) as T;
+  }
+
   async onModuleInit() {
     await this.$connect();
   }

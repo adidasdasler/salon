@@ -1,5 +1,6 @@
 /** SALON shared Tailwind preset — brand palette used by all apps. */
 module.exports = {
+  darkMode: 'class',
   content: [],
   theme: {
     extend: {

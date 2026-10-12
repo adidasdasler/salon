@@ -56,8 +56,14 @@ export class AuthController {
   @Public()
   @HttpCode(200)
   @Post('refresh')
-  async refresh(@Body() dto: RefreshDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const tokens = await this.auth.refresh(dto.refreshToken, req.ip, req.headers['user-agent']);
+  async refresh(
+    @Body() dto: RefreshDto,
+    @Req() req: Request & { cookies?: Record<string, string> },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    // httpOnly cookie is the primary source; body value is a fallback for non-browser clients.
+    const token = dto.refreshToken || req.cookies?.[REFRESH_COOKIE] || '';
+    const tokens = await this.auth.refresh(token, req.ip, req.headers['user-agent']);
     res.cookie(ACCESS_COOKIE, tokens.accessToken, cookieOpts(15 * 60_000));
     res.cookie(REFRESH_COOKIE, tokens.refreshToken, cookieOpts(30 * 86_400_000));
     return ok({ rotated: true });
@@ -65,8 +71,12 @@ export class AuthController {
 
   @HttpCode(200)
   @Post('logout')
-  async logout(@Body() dto: RefreshDto, @Res({ passthrough: true }) res: Response) {
-    await this.auth.logout(dto.refreshToken);
+  async logout(
+    @Body() dto: RefreshDto,
+    @Req() req: Request & { cookies?: Record<string, string> },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    await this.auth.logout(dto.refreshToken || req.cookies?.[REFRESH_COOKIE] || '');
     res.clearCookie(ACCESS_COOKIE);
     res.clearCookie(REFRESH_COOKIE);
     return ok({ loggedOut: true });

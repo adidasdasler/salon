@@ -9,3 +9,11 @@ node_modules/
 *.swo
 .DS_Store
 Thumbs.db
+
+# build artifacts
+dist/
+build/
+coverage/
+*.log
+dev-dist/
+.vite/

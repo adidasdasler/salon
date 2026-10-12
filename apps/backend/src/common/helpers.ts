@@ -1,5 +1,33 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
+
+/** Money columns are stored as kopecks (spec §3 conventions). */
+const MONEY_FIELDS = new Set(['price', 'paidAmount', 'totalSpent', 'amount', 'priceMonthly', 'priceYearly']);
+
+/**
+ * Normalize a value for JSON transport: Decimal → integer kopecks, BigInt → number.
+ * Exported from helpers so every module can use it; PrismaService re-exports as `normalize`.
+ */
+export function normalizeValue(key: string | null, v: unknown): unknown {
+  if (v === null || v === undefined) return v;
+  if (typeof v === 'bigint') return Number(v);
+  if (Prisma.Decimal.isDecimal(v)) {
+    const n = Number((v as Prisma.Decimal).toString());
+    // money columns are integer kopecks — round to avoid float dust
+    return key && MONEY_FIELDS.has(key) ? Math.round(n) : n;
+  }
+  if (Array.isArray(v)) return v.map((x) => normalizeValue(null, x));
+  if (v instanceof Date) return v;
+  if (typeof v === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      out[k] = normalizeValue(k, val);
+    }
+    return out;
+  }
+  return v;
+}
 
 /** Attach/propagate X-Request-ID (spec §6.3). */
 export function requestId(req: Request, res: Response, next: NextFunction) {
@@ -31,7 +59,9 @@ export function paginationMeta(total: number, p: PaginationParams) {
 
 /** Success envelope per spec §5.1 */
 export function ok<T>(data: T, meta?: Record<string, unknown>) {
-  return meta ? { success: true as const, data, meta } : { success: true as const, data };
+  // Normalize Decimal/BigInt → JSON-safe numbers so money fields never break res.json()
+  const normalized = normalizeValue(null, data) as T;
+  return meta ? { success: true as const, data: normalized, meta } : { success: true as const, data: normalized };
 }
 
 /** Honeypot check (spec §9.3): bots fill hidden `website` field. */

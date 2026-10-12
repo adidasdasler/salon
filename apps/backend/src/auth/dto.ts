@@ -75,8 +75,10 @@ export class LoginDto {
 }
 
 export class RefreshDto {
+  @IsOptional()
   @IsString()
-  refreshToken!: string;
+  @MaxLength(128)
+  refreshToken?: string; // httpOnly cookie is the primary source; body value optional for non-browser clients
 }
 
 export class ChangePasswordDto {
