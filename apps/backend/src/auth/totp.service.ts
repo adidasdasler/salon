@@ -46,10 +46,10 @@ export class TotpService {
     const hash = this.atStep(secretB32, counter);
     const offset = hash[hash.length - 1] & 0x0f;
     const binary =
-      ((hash[offset] & 0x7f) << 24) |
-      ((hash[offset + 1] & 0xff) << 16) |
-      ((hash[offset + 2] & 0xff) << 8) |
-      (hash[offset + 3] & 0xff);
+      ((hash[offset]! & 0x7f) << 24) |
+      ((hash[offset + 1]! & 0xff) << 16) |
+      ((hash[offset + 2]! & 0xff) << 8) |
+      (hash[offset + 3]! & 0xff);
     return String(binary % 1_000_000).padStart(6, '0');
   }
 

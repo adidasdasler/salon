@@ -6,7 +6,9 @@ import { AppError } from '../common/app-error';
 import { PrismaService } from '../database/prisma.service';
 import { YookassaService } from './yookassa.service';
 
-const PERIOD_DAYS: Record<BillingPeriod, number> = { MONTHLY: 30, YEARLY: 365 };
+// Accept both @salon/core string enums and Prisma's runtime $Enums literals (same values).
+type PeriodLike = 'MONTHLY' | 'YEARLY';
+const PERIOD_DAYS: Record<PeriodLike, number> = { MONTHLY: 30, YEARLY: 365 };
 
 /**
  * Billing module (spec §5.2 Billing, §5.3): plans, subscription, payments, limits.
@@ -97,7 +99,12 @@ export class BillingController {
     });
     if (!sub) throw AppError.notFound('Подписка не найдена');
 
-    const period: BillingPeriod = dto.billingPeriod ?? sub.billingPeriod;
+    // Validate against Prisma's generated enum ($Enums) — the runtime source of truth.
+    const validPeriods: string[] = Object.values(this.prisma.$Enums.BillingPeriod);
+    if (dto.billingPeriod !== undefined && !validPeriods.includes(dto.billingPeriod)) {
+      throw AppError.badRequest('VALIDATION_ERROR', 'Некорректный billingPeriod');
+    }
+    const period = dto.billingPeriod ?? sub.billingPeriod;
     const amountKopecks = Number(period === 'YEARLY' ? sub.plan.priceYearly : sub.plan.priceMonthly);
     if (amountKopecks <= 0) throw AppError.badRequest('VALIDATION_ERROR', 'Некорректная сумма тарифа');
 
@@ -114,7 +121,7 @@ export class BillingController {
       data: {
         tenantId: auth.tenantId,
         subscriptionId: sub.id,
-        amount: BigInt(amountKopecks),
+        amount: amountKopecks,
         status: 'PENDING',
         provider: 'yookassa',
         externalId: ykPayment.id,
@@ -177,8 +184,9 @@ export class BillingController {
   }
 
   /** Used by webhooks after payment.succeeded — exported logic lives here for reuse. */
-  static nextPeriodEnd(from: Date, period: BillingPeriod): Date {
-    return new Date(from.getTime() + PERIOD_DAYS[period] * 86_400_000);
+  static nextPeriodEnd(from: Date, period: PeriodLike): Date {
+    const days = PERIOD_DAYS[period] ?? 30;
+    return new Date(from.getTime() + days * 86_400_000);
   }
 }
 

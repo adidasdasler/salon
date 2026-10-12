@@ -39,7 +39,7 @@ export class YookassaService {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Idempotency-Key: params.idempotencyKey ?? randomUUID(),
+        'Idempotency-Key': params.idempotencyKey ?? randomUUID(),
         Authorization: 'Basic ' + Buffer.from(`${this.creds.shopId}:${this.creds.secretKey}`).toString('base64'),
       },
       body: JSON.stringify({

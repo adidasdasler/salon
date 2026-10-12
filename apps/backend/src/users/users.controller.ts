@@ -57,7 +57,9 @@ export class UsersController {
       });
       return created;
     });
-    const { passwordHash, ...safe } = user;
+    // Strip the password hash before returning the user object.
+    const safe: Record<string, unknown> = { ...user };
+    delete safe.passwordHash;
     // In production tempPassword is delivered via email; returned for MVP demo.
     return ok({ user: safe, tempPassword });
   }

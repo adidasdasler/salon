@@ -46,6 +46,14 @@ enum BookingSource {
   TELEGRAM_BOT
 }
 
+enum CustomerSource {
+  MANUAL
+  WIDGET
+  IMPORT
+  REFERRAL
+  OTHER
+}
+
 enum ChannelType {
   TELEGRAM
 }
@@ -264,7 +272,7 @@ model Customer {
   totalVisits  Int       @default(0)
   totalSpent   Decimal   @default(0) @db.Decimal(12, 0) // kopecks
   lastVisitAt  DateTime?
-  source       String?
+  source       CustomerSource @default(MANUAL)
   metadata     Json      @default("{}")
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

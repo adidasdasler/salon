@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { CustomerSource } from '@prisma/client';
 import { Public } from '../common/decorators';
 import { ok, isBot } from '../common/helpers';
 import { AppError } from '../common/app-error';
@@ -79,7 +80,7 @@ export class PublicController {
   @Public()
   @Post('book')
   async book(@Body() dto: PublicBookDto) {
-    if (isBot(dto)) throw AppError.badRequest('VALIDATION_ERROR', 'Форма заполнена неверно');
+    if (isBot(dto as unknown as Record<string, unknown>)) throw AppError.badRequest('VALIDATION_ERROR', 'Форма заполнена неверно');
     const tenant = await this.resolve(dto.subdomain);
 
     return this.prisma.withTenant(tenant.id, async (tx) => {
@@ -87,7 +88,7 @@ export class PublicController {
       let customer = await tx.customer.findFirst({ where: { phone: dto.customerPhone, deletedAt: null } });
       if (!customer) {
         customer = await tx.customer.create({
-          data: { tenantId: tenant.id, name: dto.customerName, phone: dto.customerPhone, source: 'widget' },
+          data: { tenantId: tenant.id, name: dto.customerName, phone: dto.customerPhone, source: CustomerSource.WIDGET },
         });
       }
       return customer.id;

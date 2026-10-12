@@ -43,9 +43,9 @@ export class WebhooksController {
   @HttpCode(200)
   @Post('yookassa')
   async yookassa(
+    @Body() event: YooKassaEvent,
     @Req() req: RawBodyRequest<Request>,
     @Headers('x-yandex-signature') signature?: string,
-    @Body() event: YooKassaEvent,
   ) {
     const raw = req.rawBody?.toString('utf8') ?? JSON.stringify(event);
     if (!this.yk.verifySignature(raw, signature)) {
@@ -63,7 +63,13 @@ export class WebhooksController {
     }
 
     if (event.event === 'payment.succeeded' && local.status === 'PENDING') {
-      const period = event.object?.metadata?.billingPeriod ?? 'MONTHLY';
+      type Period = (typeof this.prisma.$Enums.BillingPeriod)[keyof typeof this.prisma.$Enums.BillingPeriod];
+      const rawPeriod = event.object?.metadata?.billingPeriod;
+      const validPeriods: string[] = Object.values(this.prisma.$Enums.BillingPeriod);
+      const period: Period =
+        typeof rawPeriod === 'string' && validPeriods.includes(rawPeriod)
+          ? (rawPeriod as Period)
+          : this.prisma.$Enums.BillingPeriod.MONTHLY;
       await this.prisma.$transaction(async (tx) => {
         await tx.payment.update({
           where: { id: local.id },

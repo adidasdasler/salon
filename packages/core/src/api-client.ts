@@ -22,7 +22,7 @@ export class ApiError extends Error {
 
 export interface ApiClientOptions {
   baseUrl: string; // e.g. https://api.salon.ru/v1 or /v1 (proxied in dev)
-  credentials?: RequestCredentials; // default 'include'
+  credentials?: 'include' | 'same-origin' | 'omit'; // default 'include'
 }
 
 type QueueItem = { resolve: (v: string | null) => void };
@@ -80,7 +80,7 @@ export function createApiClient(opts: ApiClientOptions) {
 
     let body: ApiResponse<T>;
     try {
-      body = await res.json();
+      body = (await res.json()) as ApiResponse<T>;
     } catch {
       throw new ApiError('INTERNAL', `Сервер вернул некорректный ответ (${res.status})`, res.status);
     }

@@ -43,6 +43,14 @@ export enum BookingSource {
   TELEGRAM_BOT = 'TELEGRAM_BOT',
 }
 
+export enum CustomerSource {
+  MANUAL = 'MANUAL',
+  WIDGET = 'WIDGET',
+  IMPORT = 'IMPORT',
+  REFERRAL = 'REFERRAL',
+  OTHER = 'OTHER',
+}
+
 export enum ChannelType {
   TELEGRAM = 'TELEGRAM',
 }

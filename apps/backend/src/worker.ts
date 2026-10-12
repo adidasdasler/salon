@@ -78,7 +78,7 @@ new Worker(
     });
     return { sent };
   },
-  { connection, concurrency: 10, defaultJobOptions: RETRY },
+  { connection, concurrency: 10 },
 );
 
 // ---- messages queue (broadcasts / inbound replies) ----
@@ -96,7 +96,7 @@ new Worker(
     });
     return { sent };
   },
-  { connection, concurrency: 20, defaultJobOptions: RETRY },
+  { connection, concurrency: 20 },
 );
 
 // ---- analytics queue (placeholder per-tenant stats recompute at 02:00) ----
@@ -105,13 +105,15 @@ new Worker(
   async (job) => {
     const { tenantId } = job.data as { tenantId: string };
     const count = await prisma.booking.count({ where: { tenantId, status: 'COMPLETED' } });
+    const t = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    const prev = (t?.settings ?? {}) as Record<string, unknown>;
     await prisma.tenant.update({
       where: { id: tenantId },
-      data: { settings: { ...(await prisma.tenant.findUnique({ where: { id: tenantId } }))?.settings, cachedCompletedBookings: count } as object },
+      data: { settings: { ...prev, cachedCompletedBookings: count } },
     });
     return { recomputed: true };
   },
-  { connection, concurrency: 5, defaultJobOptions: RETRY },
+  { connection, concurrency: 5 },
 );
 
 const queueEvents = new QueueEvents('reminders', { connection: connection.duplicate() });

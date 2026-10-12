@@ -53,7 +53,7 @@ export class ServicesController {
         data: tpl.items.map((i) => ({
           tenantId: auth.tenantId,
           name: i.name,
-          price: BigInt(i.priceKopecks),
+          price: i.priceKopecks,
           duration: i.duration,
           bufferTime: i.bufferTime ?? 0,
         })),
@@ -77,7 +77,7 @@ export class ServicesController {
           tenantId: auth.tenantId,
           name: dto.name,
           description: dto.description,
-          price: BigInt(dto.priceKopecks),
+          price: dto.priceKopecks,
           duration: dto.duration,
           bufferTime: dto.bufferTime ?? 0,
           categoryId: dto.categoryId,
@@ -106,7 +106,7 @@ export class ServicesController {
     return this.prisma.withTenant(auth.tenantId, async (tx) => {
       const service = await tx.service.update({
         where: { id, tenantId: auth.tenantId },
-        data: { ...rest, ...(priceKopecks !== undefined ? { price: BigInt(priceKopecks) } : {}) } as never,
+        data: { ...rest, ...(priceKopecks !== undefined ? { price: priceKopecks } : {}) } as never,
       });
       if (resourceIds) {
         await tx.serviceResource.deleteMany({ where: { serviceId: id } });

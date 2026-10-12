@@ -1,4 +1,4 @@
-import { randomBytes, createHmac, timingSafeEqual } from 'node:crypto';
+import { randomBytes, createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { CanActivate, ExecutionContext, Injectable, ForbiddenException } from '@nestjs/common';
 import type { Request, Response } from 'express';
 

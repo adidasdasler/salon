@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { CustomerSource } from '@prisma/client';
 import { CurrentUser, AuthContext } from '../common/decorators';
 import { ok, parsePagination, paginationMeta } from '../common/helpers';
 import { AppError } from '../common/app-error';
@@ -54,7 +55,7 @@ export class CustomersController {
   create(
     @CurrentUser() auth: AuthContext,
     @Body()
-    dto: { name: string; phone: string; email?: string; birthDate?: string; tags?: string[]; notes?: string; source?: string },
+    dto: { name: string; phone: string; email?: string; birthDate?: string; tags?: string[]; notes?: string; source?: CustomerSource },
   ) {
     return this.prisma.withTenant(auth.tenantId, async (tx) => {
       const existing = await tx.customer.findFirst({ where: { phone: dto.phone, deletedAt: null } });
@@ -68,7 +69,7 @@ export class CustomersController {
           birthDate: dto.birthDate ? new Date(dto.birthDate) : undefined,
           tags: dto.tags ?? [],
           notes: dto.notes,
-          source: dto.source ?? 'manual',
+          source: dto.source ?? CustomerSource.MANUAL,
         },
       });
       // Audit log records access to personal data (spec §9.3)
@@ -116,7 +117,7 @@ export class CustomersController {
         const exists = await tx.customer.findFirst({ where: { phone: i.phone } });
         if (exists) skipped++;
         else {
-          await tx.customer.create({ data: { tenantId: auth.tenantId, name: i.name, phone: i.phone, email: i.email, source: 'import' } });
+          await tx.customer.create({ data: { tenantId: auth.tenantId, name: i.name, phone: i.phone, email: i.email, source: CustomerSource.IMPORT } });
           created++;
         }
       }

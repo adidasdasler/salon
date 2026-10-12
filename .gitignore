@@ -1,19 +1,1 @@
-*.tsbuildinfo
 node_modules/
-.env
-.env.local
-.env.*.local
-.vscode/
-.idea/
-*.swp
-*.swo
-.DS_Store
-Thumbs.db
-
-# build artifacts
-dist/
-build/
-coverage/
-*.log
-dev-dist/
-.vite/

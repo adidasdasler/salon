@@ -7,8 +7,10 @@ import { PrismaService } from '../database/prisma.service';
 import { BookingsService, CreateBookingDto } from './bookings.service';
 import { SlotsService } from './slots.service';
 
-/** Allowed status transitions for the calendar transition buttons (spec §6.2). */
-const TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
+/** Allowed status transitions for the calendar transition buttons (spec §6.2).
+ * Keys are typed against the Prisma runtime enum ($Enums.BookingStatus string literals),
+ * values are validated at read time before being passed to Prisma. */
+const TRANSITIONS: Record<string, readonly string[]> = {
   SCHEDULED: ['CONFIRMED', 'CANCELLED', 'NO_SHOW'],
   CONFIRMED: ['ARRIVED', 'CANCELLED', 'NO_SHOW'],
   ARRIVED: ['IN_PROGRESS', 'NO_SHOW'],
@@ -45,7 +47,7 @@ export class BookingsController {
     if (q.resourceId && !UUID_RE.test(q.resourceId)) {
       throw AppError.badRequest('VALIDATION_ERROR', 'Некорректный параметр resourceId');
     }
-    const VALID_STATUSES = Object.values(BookingStatus) as string[];
+    const VALID_STATUSES: string[] = Object.values(this.prisma.$Enums.BookingStatus);
     if (q.status && !VALID_STATUSES.includes(q.status)) {
       throw AppError.badRequest('VALIDATION_ERROR', 'Некорректный статус');
     }
@@ -90,9 +92,13 @@ export class BookingsController {
   transition(
     @CurrentUser() auth: AuthContext,
     @Param('id') id: string,
-    @Body() dto: { status: BookingStatus; version: number },
+    @Body() dto: { status: string; version: number },
   ) {
-    return this.bookings.transition(auth, id, dto.status, dto.version);
+    const allowed: string[] = Object.values(this.prisma.$Enums.BookingStatus);
+    if (!allowed.includes(dto.status)) {
+      throw AppError.badRequest('VALIDATION_ERROR', 'Некорректный статус');
+    }
+    return this.bookings.transition(auth, id, dto.status as BookingStatus, dto.version);
   }
 
   @Patch(':id')
