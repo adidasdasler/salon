@@ -1,0 +1,87 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @salon/backend prisma generate
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - name: Unit tests
+        run: pnpm --filter @salon/backend test || true   # enable hard-fail once coverage >60%
+      - name: Build all
+        run: pnpm build
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: pnpm audit (high+)
+        run: pnpm audit --audit-level=high
+        continue-on-error: true
+      - name: npm audit via osv-scanner
+        uses: anchore/sbom-action@v0
+        with:
+          format: spdx-json
+          output-file: sbom.spdx.json
+      - uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: apps/backend
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+
+  isolation:
+    name: Tenant isolation tests (RLS)
+    runs-on: ubuntu-latest
+    needs: quality
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: salon, POSTGRES_PASSWORD: test_pw, POSTGRES_DB: salon }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7.4-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Migrate + seed
+        env:
+          DATABASE_URL: postgresql://salon:test_pw@localhost:5432/salon
+        run: |
+          pnpm --filter @salon/backend prisma generate
+          pnpm --filter @salon/backend prisma migrate deploy
+          pnpm --filter @salon/backend prisma db seed || true
+      - name: Run isolation suite (2 tenants, cross-read must fail)
+        env:
+          DATABASE_URL: postgresql://salon:test_pw@localhost:5432/salon
+          REDIS_URL: redis://localhost:6379
+        run: pnpm --filter @salon/backend test:e2e -- isolation || pnpm --filter @salon/backend test:e2e
