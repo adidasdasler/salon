@@ -1,0 +1,439 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Enums (mirror @salon/core) ----------
+
+enum TenantPlan {
+  START
+  BUSINESS
+  NETWORK
+}
+
+enum TenantStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+enum UserRole {
+  OWNER
+  MANAGER
+  ADMIN
+  MASTER
+}
+
+enum BookingStatus {
+  SCHEDULED
+  CONFIRMED
+  ARRIVED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum BookingSource {
+  MANUAL
+  WIDGET
+  TELEGRAM_BOT
+}
+
+enum ChannelType {
+  TELEGRAM
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum ReminderType {
+  BEFORE_24H
+  BEFORE_2H
+  AFTER_VISIT
+}
+
+enum ReminderChannel {
+  TELEGRAM
+  SMS
+}
+
+enum ReminderStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum BillingPeriod {
+  MONTHLY
+  YEARLY
+}
+
+// ---------- Core models ----------
+
+model Tenant {
+  id          String       @id @default(uuid()) @db.Uuid
+  subdomain   String       @unique
+  name        String
+  plan        TenantPlan   @default(START)
+  status      TenantStatus @default(TRIAL)
+  timezone    String       @default("Europe/Moscow")
+  settings    Json         @default("{}")
+  trialEndsAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?
+
+  users         User[]
+  resources     Resource[]
+  services      Service[]
+  categories    ServiceCategory[]
+  customers     Customer[]
+  bookings      Booking[]
+  channels      Channel[]
+  messages      Message[]
+  reminders     Reminder[]
+  auditLogs     AuditLog[]
+  subscription  Subscription?
+  payments      Payment[]
+
+  @@index([status])
+}
+
+model User {
+  id                   String    @id @default(uuid()) @db.Uuid
+  tenantId             String    @db.Uuid
+  email                String
+  passwordHash         String
+  name                 String
+  role                 UserRole  @default(MASTER)
+  phone                String?
+  avatarUrl            String?
+  twoFactorEnabled     Boolean   @default(false)
+  twoFactorSecret      String?
+  failedLoginAttempts  Int       @default(0)
+  lockedUntil          DateTime?
+  lastLoginAt          DateTime?
+  lastLoginIp          String?
+  passwordResetToken   String?
+  passwordResetExpires DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  deletedAt            DateTime?
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  resource      Resource?
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  tokenHash  String    @unique // SHA-256 of opaque token
+  family     String    @db.Uuid // rotation family
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  replacedBy String?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([family])
+}
+
+model Resource {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @db.Uuid
+  userId         String?  @unique @db.Uuid
+  name           String
+  phone          String?
+  email          String?
+  avatarUrl      String?
+  schedule       Json?    // weekly working hours
+  payrollConfig  Json?    // salary rules (V1.2)
+  capabilities   String[] // e.g. ["hair","nails"]
+  metadata       Json     @default("{}")
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+
+  tenant       Tenant          @relation(fields: [tenantId], references: [id])
+  user         User?           @relation(fields: [userId], references: [id])
+  services     ServiceResource[]
+  bookings     Booking[]
+
+  @@unique([tenantId, phone])
+  @@index([tenantId, isActive])
+}
+
+model ServiceCategory {
+  id       String   @id @default(uuid()) @db.Uuid
+  tenantId String   @db.Uuid
+  name     String
+  sortOrder Int     @default(0)
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  services Service[]
+
+  @@unique([tenantId, name])
+}
+
+model Service {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @db.Uuid
+  name           String
+  description    String?
+  price          Decimal   @db.Decimal(12, 0) // kopecks
+  duration       Int       // minutes
+  bufferTime     Int       @default(0) // minutes
+  categoryId     String?   @db.Uuid
+  inventoryUsage Json?     // V1.2 — склад
+  metadata       Json      @default("{}")
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  tenant    Tenant          @relation(fields: [tenantId], references: [id])
+  category  ServiceCategory? @relation(fields: [categoryId], references: [id])
+  resources ServiceResource[]
+  bookings  Booking[]
+
+  @@index([tenantId, isActive])
+}
+
+model ServiceResource {
+  resourceId String @db.Uuid
+  serviceId  String @db.Uuid
+
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  service  Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@id([resourceId, serviceId])
+}
+
+model Customer {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @db.Uuid
+  name         String
+  phone        String
+  email        String?
+  birthDate    DateTime?
+  tags         String[]  @default([])
+  preferences  Json      @default("{}")
+  notes        String?
+  totalVisits  Int       @default(0)
+  totalSpent   Decimal   @default(0) @db.Decimal(12, 0) // kopecks
+  lastVisitAt  DateTime?
+  source       String?
+  metadata     Json      @default("{}")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id])
+  bookings Booking[]
+  messages Message[]
+  channels Channel[]
+
+  @@unique([tenantId, phone])
+  @@index([tenantId])
+}
+
+model Booking {
+  id          String        @id @default(uuid()) @db.Uuid
+  tenantId    String        @db.Uuid
+  customerId  String        @db.Uuid
+  resourceId  String        @db.Uuid
+  serviceId   String        @db.Uuid
+  startsAt    DateTime
+  endsAt      DateTime // startsAt + duration + bufferTime
+  status      BookingStatus @default(SCHEDULED)
+  price       Decimal       @db.Decimal(12, 0) // snapshot at creation, kopecks
+  paidAmount  Decimal       @default(0) @db.Decimal(12, 0)
+  source      BookingSource @default(MANUAL)
+  notes       String?
+  version     Int           @default(0) // optimistic locking
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  customer  Customer   @relation(fields: [customerId], references: [id])
+  resource  Resource   @relation(fields: [resourceId], references: [id])
+  service   Service    @relation(fields: [serviceId], references: [id])
+  reminders Reminder[]
+
+  @@index([tenantId, startsAt])
+  @@index([tenantId, resourceId, startsAt])
+  @@index([tenantId, status])
+}
+
+model Channel {
+  id         String      @id @default(uuid()) @db.Uuid
+  tenantId   String      @db.Uuid
+  customerId String?     @db.Uuid
+  type       ChannelType
+  config     Json        // e.g. { telegramChatId, botTokenRef }
+  isActive   Boolean     @default(true)
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  customer Customer? @relation(fields: [customerId], references: [id])
+  messages Message[]
+
+  @@unique([tenantId, type, customerId])
+}
+
+model Message {
+  id          String           @id @default(uuid()) @db.Uuid
+  tenantId    String           @db.Uuid
+  channelId   String           @db.Uuid
+  customerId  String?          @db.Uuid
+  externalId  String?          @unique
+  direction   MessageDirection
+  text        String
+  attachments Json?
+  status      MessageStatus    @default(PENDING)
+  error       String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id])
+  channel Channel  @relation(fields: [channelId], references: [id])
+  customer Customer? @relation(fields: [customerId], references: [id])
+
+  @@index([tenantId, channelId, createdAt])
+}
+
+model Reminder {
+  id          String          @id @default(uuid()) @db.Uuid
+  tenantId    String          @db.Uuid
+  bookingId   String          @db.Uuid
+  type        ReminderType
+  channel     ReminderChannel @default(TELEGRAM)
+  scheduledAt DateTime
+  sentAt      DateTime?
+  status      ReminderStatus  @default(PENDING)
+  attempts    Int             @default(0)
+  lastError   String?
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingId, type, channel])
+  @@index([tenantId, scheduledAt, status])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  userId     String?  @db.Uuid
+  action     String   // e.g. booking.create
+  entityType String   // e.g. Booking
+  entityId   String?
+  before     Json?
+  after      Json?
+  ip         String?
+  userAgent  String?
+  requestId  String?
+  createdAt  DateTime @default(now())
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id])
+  user   User?   @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, entityType, entityId])
+  @@index([userId, createdAt])
+}
+
+// ---------- Billing ----------
+
+model Plan {
+  id           String    @id @default(uuid()) @db.Uuid
+  code         String    @unique // START | BUSINESS | NETWORK
+  name         String
+  description  String?
+  priceMonthly Decimal   @db.Decimal(12, 0) // kopecks
+  priceYearly  Decimal   @db.Decimal(12, 0)
+  limits       Json      // { maxResources, maxBookingsPerMonth, ... }
+  features     Json      // string[]
+  isActive     Boolean   @default(true)
+  sortOrder    Int       @default(0)
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                String             @id @default(uuid()) @db.Uuid
+  tenantId          String             @unique @db.Uuid
+  planId            String             @db.Uuid
+  status            SubscriptionStatus @default(TRIAL)
+  billingPeriod     BillingPeriod      @default(MONTHLY)
+  trialEndsAt       DateTime?
+  currentPeriodStart DateTime
+  currentPeriodEnd  DateTime
+  cancelAtPeriodEnd Boolean            @default(false)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  plan     Plan      @relation(fields: [planId], references: [id])
+  payments Payment[]
+}
+
+model Payment {
+  id             String        @id @default(uuid()) @db.Uuid
+  tenantId       String        @db.Uuid
+  subscriptionId String        @db.Uuid
+  amount         Decimal       @db.Decimal(12, 0) // kopecks
+  currency       String        @default("RUB")
+  status         PaymentStatus @default(PENDING)
+  provider       String        @default("yookassa")
+  externalId     String?       @unique // Idempotency: ЮKassa payment id
+  paidAt         DateTime?
+  metadata       Json          @default("{}")
+  createdAt      DateTime      @default(now())
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+
+  @@index([tenantId, createdAt])
+}

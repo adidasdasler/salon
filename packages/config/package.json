@@ -1,0 +1,7 @@
+{
+  "name": "@salon/config",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SALON shared configs: tsconfig base, eslint, tailwind preset",
+  "files": ["tsconfig.base.json", "eslint.config.js", "tailwind.preset.cjs"]
+}
